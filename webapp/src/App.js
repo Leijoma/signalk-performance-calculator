@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { Card, CardContent, Typography, Grid, Box } from "@mui/material";
+import usePolarData from "./getPolar"; 
+import PolarPlot from "./PolarPlot";
 
 // ──────────────────────────────────────────────────────────────
 // Helper – format + convert
@@ -22,6 +24,7 @@ function formatValue(value, unit) {
 }
 
 export function DataCard({ title, value, unit }) {
+   
   return (
     <Card variant="outlined" sx={{ width: 150, textAlign: 'center', backgroundColor: '#111', color: '#fff', borderRadius: 3, p: 2 }}>
       <CardContent>
@@ -51,6 +54,7 @@ function Section({ title, children }) {
 }
 
 function DashboardGrid({ data }) {
+  const { polarData, error } = usePolarData();
   return (
     <Box sx={{ flexGrow: 1, p: 2 }}>
       {/* ‣ PERFORMANCE */}
@@ -79,12 +83,18 @@ function DashboardGrid({ data }) {
         <Grid item xs={6} sm={4} md={3}><DataCard title="Drift"  value={data.drift}   unit="kn" /></Grid>
         <Grid item xs={6} sm={4} md={3}><DataCard title="Set"    value={data.set}     unit="°" /></Grid>
       </Section>
+
+      <PolarPlot size={500}  polarData={polarData} targetAngle={data.twa} targetSpeed={data.polarSpeed} />
+   
+     
+   
     </Box>
   );
 }
 
 export default function App() {
   const [data, setData] = useState({});
+
 
   useEffect(() => {
     const ws = new WebSocket("ws://192.168.1.211:3000/signalk/v1/stream");

@@ -1,10 +1,3 @@
-// index.js – Performance Calculator v3 + H5000-N2K emulation
-// -----------------------------------------------------------------------------
-//  ✱ Alla Signal K-hastigheter i **m/s** (SI).  När COG/SOG saknas (plotter av) →
-//    • leeway / current.speed / current.set skickas ändå men med värde null.
-//  ✱ N2K-frames skickas endast när motsvarande värden finns (ej null/NaN).
-// -----------------------------------------------------------------------------
-
 const path  = require('path')
 const fs    = require('fs')
 const polarReader          = require('./polarReader')
@@ -25,12 +18,12 @@ module.exports = function (app) {
   const toVal   = v => (v == null || Number.isNaN(v) ? null : v)
 
   const plugin = {
-    id:'performance-calculator-v3',
-    name:'Performance Calculator v3',
-    description:'Emulates B&G H5000 calculations and streams N2K'
+    id:'performance-calculator',
+    name:'Performance Calculator',
+    description:'Emulates B&G H5000 calculations and streams N2K',
+    options: {}
   }
 
-  // ───────────────────────── Schema (UI-inställningar) ─────────────────────────
   plugin.schema = {
     type:'object',
     properties:{
@@ -52,14 +45,14 @@ module.exports = function (app) {
       canDevice:{type:'string',default:'can0'},
       n2kSourceAddress:{type:'number',default:138},
 
-      // NYA inställningar för leeway
       leewayCoefficient: {type:'number', default:0.05, description:'H5000 leeway coefficient K'},
       maxLeeway: {type:'number', default:15, description:'Max leeway angle in degrees'}
     }
   }
 
-  // ─────────────────────────────── start() ───────────────────────────────
   plugin.start = function (opt) {
+    plugin.options = opt
+
     const polarPath = path.resolve(__dirname,opt.polarFile)
     if (fs.existsSync(polarPath)) polarReader.loadPolarCSV(polarPath)
     else app.error('[PerfCalc] Polar missing',polarPath)
@@ -77,7 +70,6 @@ module.exports = function (app) {
     unsubscribes = paths.map(p=> app.streambundle.getSelfStream(p,{period:200}).onValue(()=>handleDelta(opt)))
   }
 
-  // ───────────────────────── handleDelta ─────────────────────────
   function handleDelta (opt) {
     const now=Date.now(); if(now-lastRun<500) return
 
@@ -90,7 +82,6 @@ module.exports = function (app) {
       attitude:{roll:att.roll,pitch:att.pitch,yaw:att.yaw},
       yawRate:g(opt.yawRatePath), motorRunning:g(opt.enginePath),
 
-      // Skicka med leeway-parametrar till calculatePerformance
       leewayCoefficient: opt.leewayCoefficient,
       maxLeeway: opt.maxLeeway
     }
@@ -100,18 +91,17 @@ module.exports = function (app) {
     const r=calculatePerformance(inObj)
     if(!r) return
 
-    // ── Signal K delta (null om ej beräknat) ──
     const deltaVals=[
       {path:'performance.polarSpeed',          value:toVal(kts2mps(r.polarSpeed))},
       {path:'performance.velocityMadeGood',    value:toVal(kts2mps(r.vmg))},
-      {path: 'performance.targetVMG',          value:toVal(kts2mps(r.targetVMG)) },
+      {path:'performance.targetVMG',            value:toVal(kts2mps(r.targetVMG))},
 
       {path:'performance.polarSpeedRatio',     value:toVal(r.polarPerf)},
       {path:'performance.targetAngle',         value:toVal(deg2rad(r.targetTWA))},
       {path:'performance.targetBoatSpeed',     value:toVal(kts2mps(r.targetBoatSpeed))},
       {path:'performance.vmgPerformance',      value:toVal(r.vmgPerf)},
       {path:'performance.optimumWindAngle',    value:toVal(deg2rad(r.optimumWindAngle))},
-      {path:'performance.leeway',              value:toVal(deg2rad(r.leeway))},
+      {path:'performance.leeway',               value:toVal(deg2rad(r.leeway))},
 
       {path:'environment.wind.speedTrue',      value:toVal(kts2mps(r.tws))},
       {path:'environment.wind.angleTrueWater', value:toVal(r.twa)},
@@ -123,14 +113,13 @@ module.exports = function (app) {
 
     app.handleMessage(plugin.id,{ updates:[{ source:{label:plugin.name}, timestamp:new Date().toISOString(), values:deltaVals }] })
 
-    // ── N2K 130824 – skicka bara fält med giltiga värden ──
     if(h5){
       const send=(name,val,scale)=>{ if(val!=null&&!Number.isNaN(val)) h5.send(name,val,scale) }
 
       send('POLAR SPEED',       kts2mps(r.polarSpeed),        100)
       send('POLAR SPEED RATIO', r.polarPerf,                  1000)
       send('VMG TO WIND',       kts2mps(r.vmg),               100)
-      send('TARGET TWA',        deg2rad(r.targetTWA),         10000)
+      send('TARGET TWA',        deg2rad(r.targetTWA),         1000)
 
       send('TWS KNOTS',         r.tws,                        100)
       send('TWA',               r.twa,                        100)
@@ -147,21 +136,29 @@ module.exports = function (app) {
   }
 
   plugin.registerWithRouter = router => {
-    router.get('/polar',(_,res)=> res.type('text/csv').send(fs.readFileSync(path.resolve(__dirname,'polar_SY370_clean.csv'),'utf8')))
+    router.get('/polar',(_,res) => {
+      const polarPath = path.resolve(__dirname, plugin.options.polarFile || './polar_SY370_clean.csv')
+      if (fs.existsSync(polarPath)) {
+        res.type('text/csv').send(fs.readFileSync(polarPath, 'utf8'))
+      } else {
+        res.status(404).send('Polar file not found')
+      }
+    })
     router.get('/calibration',(_,res)=> res.json(calibration.calibrationData))
   }
 
   plugin.stop = () => { 
     unsubscribes.forEach(f=>f()); 
     unsubscribes=[]; 
-    if (h5) {
+    if(h5) {
       try {
         h5.stop()
       } catch (err) {
         app.error('[PerfCalc] Error stopping H5000 emulator:', err)
       }
     }
-    app.debug('[PerfCalc] stopped') }
+    app.debug('[PerfCalc] stopped') 
+  }
 
   return plugin
 }

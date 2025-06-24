@@ -137,3 +137,4 @@ dist
 
 upload.sh
 uploadWeb.sh
+.env.local
