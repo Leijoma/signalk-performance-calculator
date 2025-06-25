@@ -18,7 +18,7 @@ module.exports = function (app) {
   const toVal   = v => (v == null || Number.isNaN(v) ? null : v)
 
   const plugin = {
-    id:'performance-calculator',
+    id:'performance-calculator-v3',
     name:'Performance Calculator',
     description:'Emulates B&G H5000 calculations and streams N2K',
     options: {}

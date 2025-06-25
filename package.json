@@ -27,7 +27,8 @@
   "signalk": {
     "appIcon": "icon.png",
     "displayName": "Polar Performance",
-    "launchUrl": "/plugin/performance-calculator-v3/webapp/index.html"
+    "launchUrl": "/performance-calculator-v3/webapp/index.html"
+
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",
